@@ -6,6 +6,7 @@
 //
 
 import UIKit
+import Combine
 
 class PortfolioViewController: UIViewController {
     
@@ -90,6 +91,7 @@ class PortfolioViewController: UIViewController {
     private var profitLossTableViewHeightConstraint: NSLayoutConstraint?
     var stockViewModel = StockViewModel()
     var profitLossCellViewModel: ProfitLossCellViewModel?
+    private var cancellables = Set<AnyCancellable>()
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -207,6 +209,7 @@ extension PortfolioViewController: UITableViewDelegate, UITableViewDataSource {
 //MARK: - Observe Data
 extension PortfolioViewController {
     
+    /*
     func observeEvents() {
         stockViewModel.eventHandler = { [weak self] event in
             guard let self = self else { return }
@@ -223,6 +226,74 @@ extension PortfolioViewController {
                 print(error?.localizedDescription ?? "Error")
             }
         }
+    }
+     */
+    
+    //MARK: - Using Combine PassthroughSubject
+    /*
+    func observeEvents() {
+        stockViewModel.stocksPublisher.sink { completion in
+            switch completion {
+            case .finished:
+                DispatchQueue.main.async {
+                    self.hideLoadingIndicator()
+                    self.profitLossCellViewModel = .init(stocksArray: self.stockViewModel.stockArray)
+                    self.reloadTableViews()
+                }
+            case .failure(let error):
+                print(error.localizedDescription)
+            }
+        } receiveValue: { data in
+            print("Praveen: ", data)
+            // You can handle any received value here if needed
+        }
+        .store(in: &cancellables)
+    }
+     */
+    
+    //MARK: - Using Combine CurrentValueSubject
+    /*
+    func observeEvents() {
+        stockViewModel.stocksPublisher.sink { completion in
+            switch completion {
+            case .finished:
+                print("Finished")
+            case .failure(let error):
+                print("Error")
+            }
+        } receiveValue: { [weak self] stocks in
+            print("receiveValue")
+            guard let self = self else { return }
+            DispatchQueue.main.async {
+                self.hideLoadingIndicator()
+                self.profitLossCellViewModel = ProfitLossCellViewModel(stocksArray: stocks)
+                self.reloadTableViews()
+            }
+        }
+        .store(in: &cancellables)
+    }
+    */
+    
+    //MARK: - Using Combine Published
+    func observeEvents() {
+        stockViewModel.$stockArray
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] stocks in
+                print("Received stocks from Publisher")
+                guard let self = self else { return }
+                self.profitLossCellViewModel = ProfitLossCellViewModel(stocksArray: stocks)
+                self.reloadTableViews()
+            }
+            .store(in: &cancellables)
+        
+        stockViewModel.$isLoading
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] isLoading in
+                print("Received isLoading from Publisher")
+                guard let self = self else { return }
+                isLoading ? showLoadingIndicator() : hideLoadingIndicator()
+            }
+            .store(in: &cancellables)
     }
     
     private func reloadTableViews() {
